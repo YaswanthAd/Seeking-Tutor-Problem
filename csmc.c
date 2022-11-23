@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
+#include <assert.h>
 
 #define maxarg 5
 #define maxstu 2000
@@ -23,7 +24,6 @@ int RequestsDone = 0;
 int totalRequests = 0;
 int CompleteSessions = 0;
 int SessionTutoring = 0;
-int itr;
 
 struct StudentMetaData
 {
@@ -95,74 +95,95 @@ int CasesWorking()
     }
 }
 
+void ArrayIntialiser()
+{
+    int itr = 0;
+    while(itr<numberOfstudents)
+    {
+        if(CasesWorking())
+        {
+            QueueForNewStudents[itr] = -1;
+            QueueForTutors[itr] = -1;
+            PriorityQueue[itr][0] = -1;
+            PriorityQueue[itr][1] = -1;
+            QueueForStudentsPriority[itr]=0;
+            itr++;
+        }
+        else
+        {
+            itr++;
+        }
+    }
+}
+
 void *studentThread(void *student){
     int studentrecord=*(int*)student;
     
-    while(1){
-        if(QueueForStudentsPriority[studentrecord-1]>=helpsPerPerson) {
+    while(CasesWorking()){
+        int test;
+        if(QueueForStudentsPriority[studentrecord-1] < helpsPerPerson) {
+
+            int random = randomfunction(intialiser);
+            usleep(rand() % random);           
+            pthread_mutex_lock(&AvailableSeatlock);
+            if(ChairsOccupied >= totalNumberOfChairs){
+                printf("S: Student %d found no empty chair. Will try again later.\n",studentrecord);
+                printf("The total number of requests till now: %d\n", totalRequests);
+                pthread_mutex_unlock(&AvailableSeatlock);
+                continue;
+            }
+
+            totalRequests  = totalRequests + 1 ;
+            ChairsOccupied = ChairsOccupied + 1;
+        
+            QueueForNewStudents[studentrecord-1] = totalRequests;
+            
+
+            printf("S: Student %d takes a seat. Empty chairs = <%d of empty chairs after student %d took a seat>.\n",studentrecord,totalNumberOfChairs-ChairsOccupied, studentrecord);
+            pthread_mutex_unlock(&AvailableSeatlock);
+            
+            test = sem_post(&student_waiting_for_coordinator);
+            assert(test == 0);
+    
+            
+            while(QueueForTutors[studentrecord-1] == -1);
+
+            printf("S: Student %d received help from Tutor %d.\n",studentrecord,QueueForTutors[studentrecord-1]-numberOfstudents);
+            
+            pthread_mutex_lock(&TutorConfirmation);
+            QueueForTutors[studentrecord-1]=-1;
+            pthread_mutex_unlock(&TutorConfirmation);
             
             pthread_mutex_lock(&AvailableSeatlock);
-            RequestsDone = RequestsDone + 1;
-            pthread_mutex_unlock(&AvailableSeatlock);
+            QueueForStudentsPriority[studentrecord-1]++;
+            pthread_mutex_unlock(&AvailableSeatlock);           
 
-            sem_post(&student_waiting_for_coordinator);
-    
-            pthread_exit(NULL);
         }
         
         else
         {
-            if(CasesWorking())
-            {
-                int random = randomfunction(intialiser);
-                usleep(rand() % random);           
-                pthread_mutex_lock(&AvailableSeatlock);
-                if(ChairsOccupied >= totalNumberOfChairs){
-                    printf("S: Student %d found no empty chair. Will try again later.\n",studentrecord);
-                    printf("The total number of requests till now: %d\n", totalRequests);
-                    pthread_mutex_unlock(&AvailableSeatlock);
-                    continue;
-                }
+            pthread_mutex_lock(&AvailableSeatlock);
+            RequestsDone = RequestsDone + 1;
+            pthread_mutex_unlock(&AvailableSeatlock);
 
-                totalRequests  = totalRequests + 1 ;
-                ChairsOccupied = ChairsOccupied + 1;
-            
-                QueueForNewStudents[studentrecord-1] = totalRequests;
-                
-
-                printf("S: Student %d takes a seat. Empty chairs = <%d of empty chairs after student %d took a seat>.\n",studentrecord,totalNumberOfChairs-ChairsOccupied, studentrecord);
-                pthread_mutex_unlock(&AvailableSeatlock);
-                
-                sem_post(&student_waiting_for_coordinator);
-                
-                while(QueueForTutors[studentrecord-1] == -1);
-
-                printf("S: Student %d received help from Tutor %d.\n",studentrecord,QueueForTutors[studentrecord-1]-numberOfstudents);
-                
-                pthread_mutex_lock(&TutorConfirmation);
-                QueueForTutors[studentrecord-1]=-1;
-                pthread_mutex_unlock(&TutorConfirmation);
-                
-                pthread_mutex_lock(&AvailableSeatlock);
-                QueueForStudentsPriority[studentrecord-1]++;
-                pthread_mutex_unlock(&AvailableSeatlock);
-            }
-            else
-            {
-                pthread_exit(NULL);
-            }
+            test = sem_post(&student_waiting_for_coordinator);
+            assert(test == 0);
+    
+            pthread_exit(NULL);
         }
     }
+
+    pthread_exit(NULL);
 }
 
 void *TutorThread(void *tutor){
     int tutrID=*(int*)tutor;
     int TimeTakenByTutor;
-
+    int test;
     int StudentTime;
     int studentrecord;
     
-    while(1){
+    while(CasesWorking()){
 
         if(RequestsDone == numberOfstudents){
 
@@ -174,7 +195,8 @@ void *TutorThread(void *tutor){
         studentrecord=-1;
         
 
-        sem_wait(&coordinator_waiting_for_tutor);
+        test = sem_wait(&coordinator_waiting_for_tutor);
+        assert(test == 0);
         
         pthread_mutex_lock(&AvailableSeatlock);
 
@@ -194,8 +216,8 @@ void *TutorThread(void *tutor){
             continue;
         }
         
-        PriorityQueue[studentrecord-1][0]=-1;
-        PriorityQueue[studentrecord-1][1]=-1;
+        PriorityQueue[studentrecord-1][0]= -1;
+        PriorityQueue[studentrecord-1][1]= -1;
         
         pthread_mutex_lock(&SessionTutoringLock);
         SessionTutoring = SessionTutoring + 1;
@@ -208,7 +230,6 @@ void *TutorThread(void *tutor){
         int random2 = randomfunction(mintutors);   
         usleep(rand() % random2);
         
-
         pthread_mutex_lock(&AvailableSeatlock);
 
         CompleteSessions = CompleteSessions + 1;
@@ -222,24 +243,25 @@ void *TutorThread(void *tutor){
 
         pthread_mutex_lock(&TutorConfirmation);
         QueueForTutors[studentrecord-1] = tutrID;
-        pthread_mutex_unlock(&TutorConfirmation);
-        
+        pthread_mutex_unlock(&TutorConfirmation);      
     }
+    pthread_exit(NULL);
 }
 
 
 void *CoordinatorThread(void *coordinator){
     int coodID = * (int*)coordinator;
-    while(1){
+    int test;
+    while(CasesWorking()){
 
         if(RequestsDone == numberOfstudents){
 
             int temp;
-            for(temp=0;temp<numberOftutors;temp++){
-
-	        sem_post(&coordinator_waiting_for_tutor);
+            for(temp = coodID-1 ; temp < numberOftutors ; temp++)
+            {
+	            sem_post(&coordinator_waiting_for_tutor);
             }
-            
+                     
             pthread_exit(NULL);
         }
 
@@ -249,18 +271,21 @@ void *CoordinatorThread(void *coordinator){
 
         int temp;
         for(temp = 0;temp < numberOfstudents;temp++){
-            if(QueueForNewStudents[temp]>-1){
+            if(QueueForNewStudents[temp] > -1)
+            {
                 PriorityQueue[temp][0]=QueueForStudentsPriority[temp];
                 PriorityQueue[temp][1]=QueueForNewStudents[temp];
                 
                 printf("C: Student %d with priority %d added to the queue. Waiting students now = <%d students waiting>. Total requests = <total %d requests (notifications sent) by students for tutoring so far>\n",studentObject->studentID[temp],QueueForStudentsPriority[temp],ChairsOccupied,totalRequests);
                 QueueForNewStudents[temp]= -1;
                 
-                sem_post(&coordinator_waiting_for_tutor);
+                test = sem_post(&coordinator_waiting_for_tutor);
+                assert(test == 0);
             }
         }
         pthread_mutex_unlock(&AvailableSeatlock);
     }
+    pthread_exit(NULL);
 }
 
 int main(int argc, const char * argv[]) {
@@ -307,24 +332,8 @@ int main(int argc, const char * argv[]) {
     pthread_mutex_init(&AvailableSeatlock, NULL);
     pthread_mutex_init(&SessionTutoringLock, NULL);
 
-    itr = 0;
-    while(itr<numberOfstudents)
-    {
-        if(CasesWorking())
-        {
-            QueueForNewStudents[itr] = -1;
-            QueueForTutors[itr] = -1;
-            PriorityQueue[itr][0] = -1;
-            PriorityQueue[itr][1] = -1;
-            QueueForStudentsPriority[itr]=0;
-            itr++;
-        }
-        else
-        {
-            itr++;
-        }
-    }
-    
+    ArrayIntialiser();
+
     pthread_t *students;
     pthread_t *tutors;
     pthread_t coordinators[numberofcoordinators];
@@ -339,8 +348,6 @@ int main(int argc, const char * argv[]) {
     studentObject =  (struct StudentMetaData*)malloc(sizeof(struct StudentMetaData));
     tutorObject =  (struct TutorMetaData*)malloc(sizeof(struct TutorMetaData));
 
-
-    
     for(i = 0; i < numberOfstudents; i++)
     {
         studentObject->studentID[i] = i + 1;
