@@ -78,21 +78,6 @@ time up to 2 ms. For the tutoring part, make both the student and the tutor thre
 for 0.2 ms.
 For details on how to use pthreads, synchronization primitives mutex and semaphores see
 man pages. For a more detailed tutorial on Pthreads and Semaphores, see
-https://computing.llnl.gov/tutorials/pthreads/#Thread
-You may also want to look at the solution for sleeping barber problem. It will give you
-some clues about how to solve the problem this project poses.
-Testing
-Testing and debugging concurrent programs are hard. Adding assertions statements in
-your code help. Add as many assertions as you can. For example, in the code for
-coordinator assert that number of students waiting in the queue cannot be greater than
-the number of chairs. Similarly, in the code for tutor assert that total sessions tutored so
-far cannot exceed total requests.
-Grading Policy
-Name your program file as csmc.c and submit it in the directory /CS5348-
-xv6/xxxyyyyyy/P3. Do not submit it on elearning.
-Source code should be well structured with adequate comments clearly describing the
-different parts and functionalities implemented.
-Make sure you compile your program as follows:
 gcc csmc.c –o csmc -Wall -Werror -pthreads -std=gnu99
 There should not be any error/warning messages during compilation.
 TA will compile your program in any of the cs* machine and execute it. If your code does
